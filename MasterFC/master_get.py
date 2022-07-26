@@ -77,6 +77,7 @@ def fit_models(args):
 
         file_handler.myprint("Min query length, " + str(min_query_length) + " Min doc length " + str(min_doc_length))
         file_handler.myprint("Max query length, " + str(max_query_length) + " Max doc length " + str(max_doc_length))
+        # import pdb;pdb.set_trace()
         additional_data = {KeyWordSettings.OutputHandlerFactChecking: file_handler,
                            KeyWordSettings.GNN_Window: args.gnn_window_size}
         preprocessor = mz.preprocessors.CharManPreprocessor(fixed_length_left = args.fixed_length_left,
@@ -88,11 +89,13 @@ def fit_models(args):
         train_processed = preprocessor.fit_transform(train_pack)  # This is a DataPack
         valid_processed = preprocessor.transform(valid_pack)
         predict_processed = preprocessor.transform(predict_pack)
+        # import pdb;pdb.set_trace()
         # print(train_processed.left.head())
 
         train_interactions = ClassificationInteractions(train_processed, **additional_data)
         valid_interactions = ClassificationInteractions(valid_processed, **additional_data)
         test_interactions = ClassificationInteractions(predict_processed, **additional_data)
+        # import pdb;pdb.set_trace()
 
         file_handler.myprint('done extracting')
         t2 = time.time()

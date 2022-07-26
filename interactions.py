@@ -275,6 +275,11 @@ class ClassificationInteractions(BaseClassificationInteractions):
 
     def __init__(self, data_pack: matchzoo.DataPack, **kargs):
         super(ClassificationInteractions, self).__init__(data_pack, **kargs)
+        """
+            self.dict_claim_contents self.dict_doc_contents : padded list of words 
+            self.dict_claim_lengths self.dict_doc_lengths : number of actual words
+            self.dict_query_positions self.dict_doc_positions : another useless masks
+        """
 
         # (1) unique claims, (2) labels for each claim and (3) info of each claim
         self.claims, self.claims_labels, self.dict_claims_and_evidences_test = \
@@ -348,6 +353,7 @@ class ClassificationInteractions(BaseClassificationInteractions):
                for i in range(fixed_length)]
         words_list.extend([0 for _ in range(fixed_length-length_)])
         adj = _laplacian_normalize(np.array(adj))
+        # import pdb;pdb.set_trace()
         return words_list, adj, length_
 
     def convert_relations(self, relation: pd.DataFrame):

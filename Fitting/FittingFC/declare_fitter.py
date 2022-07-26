@@ -82,7 +82,7 @@ class DeclareFitter(DenseBaselineFitter):
         val_interactions: :class:`interactions.ClassificationInteractions`
         test_interactions: :class:`interactions.ClassificationInteractions`
         """
-        self._initialize(train_iteractions)
+        self._initialize(train_iteractions) # doesnt use train_interaction at all
         best_val_auc, best_val_f1_macro, best_epoch, test_auc = 0, 0, 0, 0
         test_results_dict = None
         iteration_counter = 0
@@ -94,7 +94,7 @@ class DeclareFitter(DenseBaselineFitter):
             self._net.train(True)
             query_ids, left_contents, left_lengths, query_sources, \
             evd_docs_ids, evd_docs_contents, evd_docs_lens, evd_sources, \
-            pair_labels = self._sampler.get_train_instances_declare(train_iteractions, self.fixed_num_evidences)
+            pair_labels = self._sampler.get_train_instances_declare(train_iteractions, self.fixed_num_evidences) ## sample from train_interaction
 
             queries, query_content, query_lengths, query_sources_shuffled, \
             evd_docs, evd_docs_contents, evd_docs_lens, evd_sources_shuffled, \
