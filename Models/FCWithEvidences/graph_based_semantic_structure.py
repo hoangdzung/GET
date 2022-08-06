@@ -52,7 +52,6 @@ class Graph_basedSemantiStructure(BasicFCModel):
         self.ggnn4claim_1 = GGNN(in_features=D, out_features=self.hidden_size)
         
         self.ggnn_with_gsl = GGNN_with_GSL(input_dim=D, hidden_dim=self.hidden_size, output_dim=self.hidden_size, rate=self.gsl_rate, dropout=self.dropout_gnn)
-        self.trans = Linear(2*self.hidden_size, self.hidden_size)
             
         # mapping query vector + claim's source vector if possible. Experiments show that without using claims'
         # src, Politifact dataset has lower performance
@@ -107,10 +106,10 @@ class Graph_basedSemantiStructure(BasicFCModel):
 
         # ggnn for query
         query_repr = self._generate_query_repr_gnn(query, query_adj, evd_count_per_query)  # output's shape is always (B1, self.hidden_size)
-        
+        # import pdb;pdb.set_trace()
         # ggnn for doc
         doc_out_ggnn = self.ggnn_with_gsl(doc_adj, embed_doc)
-        
+        # import pdb;pdb.set_trace()
         # Step 1: word-level attention to simplify the graph
         avg, word_att_weights = self._word_level_attention(left_tsr=query_repr, right_tsr=doc_out_ggnn,
                                                            right_mask=doc_mask)
@@ -141,7 +140,7 @@ class Graph_basedSemantiStructure(BasicFCModel):
 
         embed_queries = self.embedding(queries.long())  # (B, L, D)
         query_gnn_hiddens = self.ggnn4claim_1(query_adjs, embed_queries)
-
+        # import pdb;pdb.set_trace()
         query_repr = torch.sum(query_gnn_hiddens * query_mask.float(), dim=1) / query_lens.float()  # (B, D)
         query_repr = self._pad_left_tensor(query_repr, evd_count_per_query)  # (n1 + n2 + n3 + .. + nx, H)
         return query_repr
@@ -182,6 +181,7 @@ class Graph_basedSemantiStructure(BasicFCModel):
         avg, att_weight = self.self_att_word(left_tsr, right_tsr, right_mask)
         avg = torch.flatten(avg, start_dim=1)  # (n1 + n2 + n3 + ... + nx, n_head * 4D)
         # avg = torch.cat([left_tsr, avg], dim=-1)  # (B1, 2D + D)
+        # import pdb;pdb.set_trace()
         return avg, att_weight  # (n1 + n2 + n3 + ... + nx, R)
 
     def _evidence_level_attention_new(self, left_tsr: torch.Tensor, right_tsr: torch.Tensor,
@@ -215,6 +215,7 @@ class Graph_basedSemantiStructure(BasicFCModel):
             padded_avg = self._use_article_embeddings(padded_avg, doc_source_idx)
         attended_avg, att_weight = self.self_att_evd(new_left, padded_avg, mask)
         avg = torch.flatten(attended_avg, start_dim=1)  # (B, num_heads * 2D)
+        # import pdb;pdb.set_trace()
         return avg, att_weight
 
     def _set_word_attention_func(self, dim: int):

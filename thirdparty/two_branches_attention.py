@@ -42,4 +42,5 @@ class ConcatNotEqualSelfAtt(nn.Module):
         # we now can ensure padding tokens will not contribute to softmax
         attention_weights = F.softmax(linear_out, dim=1)  # (B, L, C)
         attended = torch.bmm(right.permute(0, 2, 1), attention_weights)  # (B, D, L) * (B, L, C) => (B, D, C)
+        # import pdb;pdb.set_trace()
         return attended, attention_weights

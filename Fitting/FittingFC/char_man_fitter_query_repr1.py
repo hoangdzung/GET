@@ -88,7 +88,7 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
                                                     evd_docs_contents,evd_sources, evd_docs_adj,
                                                     evd_cnt_each_query, pair_labels,
                                                     batch_size=self._batch_size)):
-
+                # import pdb;pdb.set_trace()
                 batch_query_content = my_utils.gpu(torch.from_numpy(batch_query_content), self._use_cuda)
                 batch_query_sources = my_utils.gpu(torch.from_numpy(batch_query_sources), self._use_cuda)
                 batch_query_adj = my_utils.gpu(torch.from_numpy(batch_query_adj), self._use_cuda)
@@ -188,7 +188,7 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         # # concat
         e_conts = torch.cat(e_conts, dim=0)  # (n1 + n2 + ..., R)
         e_adj = torch.cat(e_adj, dim=0)     # (n1 + n2 + ..., R, R)
-
+        # import pdb;pdb.set_trace()
         additional_paramters = {
             KeyWordSettings.QuerySources: query_sources,
             KeyWordSettings.DocSources: evd_sources,
@@ -323,7 +323,7 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         """
         assert len(true_labels) == len(predicted_labels)
         results = {}
-
+        import pdb;pdb.set_trace()
         fpr, tpr, thresholds = sklearn.metrics.roc_curve(true_labels, predicted_probs, pos_label=1)
         auc = sklearn.metrics.auc(fpr, tpr)
         f1_macro = f1_score(true_labels, predicted_labels, average='macro')

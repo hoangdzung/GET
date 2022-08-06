@@ -130,7 +130,7 @@ class MatchInteraction(object):
             contents_dict[index] = text_
             lengths_dict[index] = length_
             position_dict[index] = np.pad(np.arange(length_) + 1, (0, len(text_) - length_), 'constant')
-
+        import pdb;pdb.set_trace()
         return np.array(ids), contents_dict, lengths_dict, raw_content_dict, position_dict
 
     def convert_relations(self, relation: pd.DataFrame):
@@ -198,6 +198,7 @@ class BaseClassificationInteractions(object):
         self.dict_query_adj = self.convert_leftright(data_pack.left, text_key="text_left",
                                                      length_text_key="length_left", raw_text_key="raw_text_left",
                                                      source_key="claim_source", raw_source_key="raw_claim_source",
+                                                     keyword_key='keyword_left',
                                                      **additional_field)
         self.data_pack = data_pack
         assert len(self.unique_query_ids) == len(set(self.unique_query_ids)), "Must be unique ids"
@@ -215,14 +216,16 @@ class BaseClassificationInteractions(object):
         self.dict_doc_adj = self.convert_leftright(data_pack.right, text_key="text_right",
                                                    length_text_key="length_right",
                                                    raw_text_key="raw_text_right", source_key="evidence_source",
-                                                   raw_source_key="raw_evidence_source", **additional_field)
+                                                   raw_source_key="raw_evidence_source", 
+                                                   keyword_key='keyword_right',
+                                                   **additional_field)
 
         assert len(self.unique_doc_ids) == len(set(self.unique_doc_ids)), "Must be unique ids for doc ids"
         assert len(self.unique_query_ids) != len(
             self.unique_doc_ids), "Impossible to have equal number of docs and number of original tweets"
 
     def convert_leftright(self, part: pd.DataFrame, text_key: str, length_text_key: str, raw_text_key: str,
-                          source_key: str, raw_source_key: str, **kargs):
+                          source_key: str, raw_source_key: str, keyword_key:str, **kargs):
         """ Converting the dataframe of interactions """
         ids, contents_dict, lengths_dict, position_dict = [], {}, {}, {}
         raw_content_dict, sources, raw_sources, char_sources = {}, {}, {}, {}
@@ -298,7 +301,7 @@ class ClassificationInteractions(BaseClassificationInteractions):
         # self.padded_query_length = len(self.np_query_contents[0])
 
     def convert_leftright(self, part: pd.DataFrame, text_key: str, length_text_key: str, raw_text_key: str,
-                          source_key: str, raw_source_key: str, **kargs):
+                          source_key: str, raw_source_key: str, keyword_key:str, **kargs):
         """ Converting the dataframe of interactions
         Compress the text & build GAT adjacent matrix
         """
@@ -313,7 +316,7 @@ class ClassificationInteractions(BaseClassificationInteractions):
 
         for index, row in part.iterrows():  # very dangerous, be careful because it may change order!!!
             ids.append(index)
-            text_, adj, length_ = self.convert_text(row[text_key], fixed_length, row[length_text_key],
+            text_, adj, length_ = self.convert_text(row[text_key], row[keyword_key], fixed_length, row[length_text_key],
                                                     kargs[KeyWordSettings.GNN_Window])
             # if fixed_length==100:
             #     # contain raw text to lstm
@@ -336,24 +339,40 @@ class ClassificationInteractions(BaseClassificationInteractions):
         return np.array(ids), contents_dict, lengths_dict, raw_content_dict, \
                position_dict, sources, raw_sources, char_sources, dict_adj
 
-    def convert_text(self, raw_text, fixed_length, length, window_size=5):
-        words_list = list(set(raw_text[:length]))       # remove duplicate words in original order
-        words_list.sort(key=raw_text.index)
-        words2id = {word: id for id, word in enumerate(words_list)}
+    def convert_text(self, raw_text, keyword_text, fixed_length, length, window_size=5):
+        # assert  ids_text[:ids_text.index(0)] == len(raw_text.split())
+        keyword_text += [0] * (len(raw_text)-len(keyword_text))
+        words_list = []
+        pos2id = {}
+        keyword2pos = {}
+        for pos, (token_id, is_keyword) in enumerate(zip(raw_text, keyword_text)):
+            if not is_keyword:
+                pos2id[pos] = len(words_list) # position of this word in words_list
+                words_list.append(token_id)
+            elif token_id in keyword2pos:
+                pos2id[pos] = pos2id[keyword2pos[token_id]]
+            else:
+                keyword2pos[token_id] = pos
+                pos2id[pos] = len(words_list) # position of this word in words_list
+                words_list.append(token_id)        
+                
+        # words_list = list(set(raw_text[:length]))       # remove duplicate words in original order
+        # words_list.sort(key=raw_text.index)
+        # words2id = {word: id for id, word in enumerate(words_list)}
 
-        length_ = len(words2id)
+        length_ = len(words_list)
         neighbours = [set() for _ in range(length_)]
         # window_size = window_size if fixed_length == 30 else 300
-        for i, word in enumerate(raw_text[:length]):
+        for i in range(length):
             for j in range(max(i-window_size+1, 0), min(i+window_size, length)):
-                neighbours[words2id[word]].add(words2id[raw_text[j]])
+                neighbours[pos2id[i]].add(pos2id[j])
 
         # gat graph
         adj = [[1 if (max(i, j) < length_) and (j in neighbours[i]) else 0 for j in range(fixed_length)]
                for i in range(fixed_length)]
         words_list.extend([0 for _ in range(fixed_length-length_)])
         adj = _laplacian_normalize(np.array(adj))
-        # import pdb;pdb.set_trace()
+        import pdb;pdb.set_trace()
         return words_list, adj, length_
 
     def convert_relations(self, relation: pd.DataFrame):

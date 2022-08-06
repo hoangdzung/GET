@@ -10,6 +10,7 @@ from .build_unit_from_data_pack import build_unit_from_data_pack
 from .chain_transform import chain_transform
 from .units import Vocabulary
 from .units import StatefulUnit
+import nltk
 tqdm.pandas()
 
 
@@ -62,9 +63,9 @@ class CharManPreprocessor(BasePreprocessor):
                  fixed_length_right: int = 30,
                  fixed_length_left_src: int = 30,
                  fixed_length_right_src: int = 30,
-                 filter_mode: str = 'df',
-                 filter_low_freq: float = 2,
-                 filter_high_freq: float = float('inf'),
+                #  filter_mode: str = 'df',
+                #  filter_low_freq: float = 2,
+                #  filter_high_freq: float = float('inf'),
                  remove_stop_words: bool = False):
         """Initialization."""
         super().__init__()
@@ -160,6 +161,9 @@ class CharManPreprocessor(BasePreprocessor):
 
         # data_pack.apply_on_text(self._context['filter_unit'].transform,
         #                         mode='right', inplace=True, verbose=verbose)
+        data_pack.apply_on_text(lambda tokens: [0 if i[1] == 'CD' or i[1][0] in ['N','V'] else 1 for i in nltk.pos_tag(tokens)],
+                            rename=('keyword_left', 'keyword_right'),
+                            inplace=True, verbose=verbose)
         data_pack.apply_on_text(self._context['vocab_unit'].transform,
                                 mode='both', inplace=True, verbose=verbose)
         data_pack.append_text_length(inplace=True, verbose=verbose)
