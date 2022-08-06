@@ -323,7 +323,7 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         """
         assert len(true_labels) == len(predicted_labels)
         results = {}
-        import pdb;pdb.set_trace()
+        # import pdb;pdb.set_trace()
         fpr, tpr, thresholds = sklearn.metrics.roc_curve(true_labels, predicted_probs, pos_label=1)
         auc = sklearn.metrics.auc(fpr, tpr)
         f1_macro = f1_score(true_labels, predicted_labels, average='macro')
