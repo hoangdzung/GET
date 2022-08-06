@@ -130,7 +130,7 @@ class MatchInteraction(object):
             contents_dict[index] = text_
             lengths_dict[index] = length_
             position_dict[index] = np.pad(np.arange(length_) + 1, (0, len(text_) - length_), 'constant')
-        import pdb;pdb.set_trace()
+        # import pdb;pdb.set_trace()
         return np.array(ids), contents_dict, lengths_dict, raw_content_dict, position_dict
 
     def convert_relations(self, relation: pd.DataFrame):
@@ -372,7 +372,7 @@ class ClassificationInteractions(BaseClassificationInteractions):
                for i in range(fixed_length)]
         words_list.extend([0 for _ in range(fixed_length-length_)])
         adj = _laplacian_normalize(np.array(adj))
-        import pdb;pdb.set_trace()
+        # import pdb;pdb.set_trace()
         return words_list, adj, length_
 
     def convert_relations(self, relation: pd.DataFrame):

@@ -161,7 +161,7 @@ class CharManPreprocessor(BasePreprocessor):
 
         # data_pack.apply_on_text(self._context['filter_unit'].transform,
         #                         mode='right', inplace=True, verbose=verbose)
-        data_pack.apply_on_text(lambda tokens: [0 if i[1] == 'CD' or i[1][0] in ['N','V'] else 1 for i in nltk.pos_tag(tokens)],
+        data_pack.apply_on_text(lambda tokens: [1 if i[1] == 'CD' or i[1][0] in ['N','V','P','J'] else 0 for i in nltk.pos_tag(tokens)],
                             rename=('keyword_left', 'keyword_right'),
                             inplace=True, verbose=verbose)
         data_pack.apply_on_text(self._context['vocab_unit'].transform,
