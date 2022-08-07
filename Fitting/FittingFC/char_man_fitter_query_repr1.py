@@ -55,7 +55,7 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         val_interactions: :class:`interactions.ClassificationInteractions`
         test_interactions: :class:`interactions.ClassificationInteractions`
         """
-        self._initialize(train_iteractions)
+        self._initialize(train_iteractions) # init optimizer, loss function, doesnt use train_interaction at all
         best_val_f1_macro, best_epoch = 0, 0
         test_results_dict = None
         iteration_counter = 0
@@ -65,13 +65,15 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
 
             # ------ Move to here ----------------------------------- #
             self._net.train(True)
+            # for each query/claim, sample self.fixed_num_evidences evidences
             query_ids, left_contents, left_lengths, query_sources, query_char_sources, query_adj, \
             evd_docs_ids, evd_docs_contents, evd_docs_lens, evd_sources, evd_cnt_each_query, evd_char_sources, \
             pair_labels, evd_docs_adj = self._sampler.get_train_instances_char_man(train_iteractions,
                                                                                    self.fixed_num_evidences)
 
-            queries, query_content, query_lengths, query_sources, query_char_sources, query_adj, \
-            evd_docs, evd_docs_contents, evd_docs_lens, evd_sources, evd_cnt_each_query, evd_char_sources, \
+            # shuffle batch 
+            _, query_content, _, query_sources, _, query_adj, \
+            _, evd_docs_contents, _, evd_sources, evd_cnt_each_query, _, \
             pair_labels, evd_docs_adj = my_utils.shuffle(query_ids, left_contents, left_lengths, query_sources,
                                                          query_char_sources, query_adj, evd_docs_ids, evd_docs_contents,
                                                          evd_docs_lens, evd_sources, evd_cnt_each_query,
@@ -79,45 +81,32 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
             epoch_loss, total_pairs = 0.0, 0
             t1 = time.time()
             for (minibatch_num,
-                 (batch_query, batch_query_content, batch_query_len, batch_query_sources, batch_query_chr_src,
-                  batch_query_adj, batch_evd_docs, batch_evd_contents, batch_evd_lens, batch_evd_sources,
-                  # i.e. claim source
-                  batch_evd_cnt_each_query, batch_evd_chr_src, batch_labels, batch_evd_docs_adj)) \
-                    in enumerate(my_utils.minibatch(queries, query_content, query_lengths, query_sources,
-                                                    query_char_sources, query_adj,
-                                                    evd_docs, evd_docs_contents, evd_docs_lens, evd_sources,
-                                                    evd_cnt_each_query, evd_char_sources, pair_labels, evd_docs_adj,
+                 (batch_query_content,batch_query_sources, batch_query_adj, 
+                 batch_evd_contents, batch_evd_sources,batch_evd_docs_adj,
+                  batch_evd_cnt_each_query,batch_labels)) \
+                    in enumerate(my_utils.minibatch(query_content, query_sources, query_adj,
+                                                    evd_docs_contents,evd_sources, evd_docs_adj,
+                                                    evd_cnt_each_query, pair_labels,
                                                     batch_size=self._batch_size)):
-
-                batch_query = my_utils.gpu(torch.from_numpy(batch_query), self._use_cuda)
+                # import pdb;pdb.set_trace()
                 batch_query_content = my_utils.gpu(torch.from_numpy(batch_query_content), self._use_cuda)
-                # batch_query_len = my_utils.gpu(torch.from_numpy(batch_query_len), self._use_cuda)
                 batch_query_sources = my_utils.gpu(torch.from_numpy(batch_query_sources), self._use_cuda)
-                batch_query_chr_src = my_utils.gpu(torch.from_numpy(batch_query_chr_src), self._use_cuda)
                 batch_query_adj = my_utils.gpu(torch.from_numpy(batch_query_adj), self._use_cuda)
 
-                batch_evd_docs = my_utils.gpu(torch.from_numpy(batch_evd_docs), self._use_cuda)
                 batch_evd_contents = my_utils.gpu(torch.from_numpy(batch_evd_contents), self._use_cuda)
-                # batch_evd_lens = my_utils.gpu(torch.from_numpy(batch_evd_lens), self._use_cuda)
                 batch_evd_sources = my_utils.gpu(torch.from_numpy(batch_evd_sources), self._use_cuda)
                 batch_evd_cnt_each_query = my_utils.gpu(torch.from_numpy(batch_evd_cnt_each_query), self._use_cuda)
-                batch_evd_chr_src = my_utils.gpu(torch.from_numpy(batch_evd_chr_src), self._use_cuda)
 
                 batch_labels = my_utils.gpu(torch.from_numpy(batch_labels), self._use_cuda)
                 batch_evd_docs_adj = my_utils.gpu(torch.from_numpy(batch_evd_docs_adj), self._use_cuda)
-                # total_pairs += self._batch_size * self.
-                additional_data = {KeyWordSettings.EvidenceCountPerQuery: batch_evd_cnt_each_query,
-                                   KeyWordSettings.FCClass.QueryCharSource: batch_query_chr_src,
-                                   KeyWordSettings.FCClass.DocCharSource: batch_evd_chr_src,
-                                   KeyWordSettings.Query_Adj: batch_query_adj,
-                                   KeyWordSettings.Evd_Docs_Adj: batch_evd_docs_adj}
+
                 self._optimizer.zero_grad()
                 if self._loss in ["bpr", "hinge", "pce", "bce", "cross_entropy",
                                   "vanilla_cross_entropy", "regression_loss", "masked_cross_entropy"]:
                     loss = self._get_multiple_evidences_predictions_normal(
-                        batch_query, batch_query_content, batch_query_len, batch_query_sources,
-                        batch_evd_docs, batch_evd_contents, batch_evd_lens, batch_evd_sources,
-                        batch_labels, self.fixed_num_evidences, **additional_data)
+                        batch_query_content, batch_query_adj, batch_query_sources,
+                        batch_evd_contents, batch_evd_docs_adj, batch_evd_sources,
+                        batch_labels, self.fixed_num_evidences, batch_evd_cnt_each_query)
 
                 # print("Loss: ", loss)
                 epoch_loss += loss.item()
@@ -161,16 +150,15 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         TensorboardWrapper.mywriter().close()
         self.output_handler.myprint('Best result: | vad F1_macro = %.5f | epoch = %d' % (best_val_f1_macro, best_epoch))
 
-    def _get_multiple_evidences_predictions_normal(self, query_ids: torch.Tensor,
+    def _get_multiple_evidences_predictions_normal(self,
                                                    query_contents: torch.Tensor,
-                                                   query_lens: np.ndarray,
+                                                   query_adj: torch.Tensor,
                                                    query_sources: torch.Tensor,
-                                                   evd_doc_ids: torch.Tensor,
                                                    evd_doc_contents: torch.Tensor,
-                                                   evd_docs_lens: np.ndarray,
+                                                   evd_docs_adj: torch.Tensor,
                                                    evd_sources: torch.Tensor,
                                                    labels: np.ndarray,
-                                                   n: int, **kargs) -> torch.Tensor:
+                                                   n: int, evd_count_per_query: torch.Tensor) -> torch.Tensor:
         """
         compute cross entropy loss
         Parameters
@@ -189,61 +177,23 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         -------
             loss value based on a loss function
         """
-        evd_count_per_query = kargs[KeyWordSettings.EvidenceCountPerQuery]  # (B, )
-        query_char_source = kargs[KeyWordSettings.FCClass.QueryCharSource]
-        doc_char_source = kargs[KeyWordSettings.FCClass.DocCharSource]
-        query_adj = kargs[KeyWordSettings.Query_Adj]
-        evd_docs_adj = kargs[KeyWordSettings.Evd_Docs_Adj]
-        assert evd_doc_ids.size() == evd_docs_lens.shape
-        assert query_ids.size(0) == evd_doc_ids.size(0)
-        assert query_lens.shape == labels.size()
-        assert query_contents.size(0) == evd_doc_contents.size(0)  # = batch_size
-        _, L = query_contents.size()
-        batch_size = query_ids.size(0)
-        # prunning at this step to remove padding\
-        e_lens, e_conts, q_conts, q_lens, e_adj = [], [], [], [], []
-        e_chr_src_conts = []
-        expaned_labels = []
-        for evd_cnt, q_cont, q_len, evd_lens, evd_doc_cont, evd_chr_src, label, evd_adj in \
-                zip(evd_count_per_query, query_contents, query_lens,
-                    evd_docs_lens, evd_doc_contents, doc_char_source, labels, evd_docs_adj):
+        # evd_docs_adj = kargs[KeyWordSettings.Evd_Docs_Adj]
+
+        e_conts, e_adj = [], []
+        for evd_cnt, evd_doc_cont, evd_adj in zip(evd_count_per_query, evd_doc_contents, evd_docs_adj):
             evd_cnt = int(torch_utils.cpu(evd_cnt).detach().numpy())
-            e_lens.extend(list(evd_lens[:evd_cnt]))
             e_conts.append(evd_doc_cont[:evd_cnt, :])  # stacking later
             e_adj.append(evd_adj[:evd_cnt])
-            e_chr_src_conts.append(evd_chr_src[:evd_cnt, :])
-            q_lens.extend([q_len] * evd_cnt)
-            q_conts.append(q_cont.unsqueeze(0).expand(evd_cnt, L))
-            expaned_labels.extend([int(torch_utils.cpu(label).detach().numpy())] * evd_cnt)
-        # concat
+
+        # # concat
         e_conts = torch.cat(e_conts, dim=0)  # (n1 + n2 + ..., R)
-        e_chr_src_conts = torch.cat(e_chr_src_conts, dim=0)  # (n1 + n2 + ... , R)
         e_adj = torch.cat(e_adj, dim=0)     # (n1 + n2 + ..., R, R)
-        e_lens = np.array(e_lens)  # (n1 + n2 + ..., )
-        q_conts = torch.cat(q_conts, dim=0)  # (n1 + n2 + ..., R)
-        q_lens = np.array(q_lens)
-        assert q_conts.size(0) == q_lens.shape[0] == e_conts.size(0) == e_lens.shape[0]
-
-        d_new_indices, d_old_indices = torch_utils.get_sorted_index_and_reverse_index(e_lens)
-        e_lens = my_utils.gpu(torch.from_numpy(e_lens), self._use_cuda)
-        x = query_lens
-        q_new_indices, q_restoring_indices = torch_utils.get_sorted_index_and_reverse_index(x)
-        x = my_utils.gpu(torch.from_numpy(x), self._use_cuda)
-        # query_lens = my_utils.gpu(torch.from_numpy(query_lens), self._use_cuda)
-
+        # import pdb;pdb.set_trace()
         additional_paramters = {
-            KeyWordSettings.Query_lens: x,  # 每一个query长度
-            KeyWordSettings.Doc_lens: evd_docs_lens,
-            KeyWordSettings.DocLensIndices: (d_new_indices, d_old_indices, e_lens),
-            KeyWordSettings.QueryLensIndices: (q_new_indices, q_restoring_indices, x),
             KeyWordSettings.QuerySources: query_sources,
             KeyWordSettings.DocSources: evd_sources,
-            KeyWordSettings.TempLabel: labels,
             KeyWordSettings.DocContentNoPaddingEvidence: e_conts,
-            KeyWordSettings.QueryContentNoPaddingEvidence: q_conts,
             KeyWordSettings.EvidenceCountPerQuery: evd_count_per_query,
-            KeyWordSettings.FCClass.QueryCharSource: query_char_source,  # (B, 1, L)
-            KeyWordSettings.FCClass.DocCharSource: e_chr_src_conts,
             KeyWordSettings.FIXED_NUM_EVIDENCES: n,
             KeyWordSettings.Query_Adj: query_adj,
             KeyWordSettings.Evd_Docs_Adj: e_adj                       # flatten->(n1 + n2 ..., R, R)
@@ -251,10 +201,6 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
 
         # (B,)
         predictions = self._net(query_contents, evd_doc_contents, **additional_paramters)
-        # labels.unsqueeze(-1).expand(batch_size, n).reshape(batch_size * n)
-        # labels = torch_utils.gpu(torch.from_numpy(np.array(expaned_labels)), self._use_cuda)
-        # print("Labels: ", labels)
-        # mask = (evd_doc_ids >= 0).view(batch_size * n).float()
         return self._loss_func(predictions, labels.float())
 
     def evaluate(self, testRatings: interactions.ClassificationInteractions, K: int, output_ranking=False, **kargs):
@@ -266,10 +212,8 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         K
         output_ranking: whether we should output predictions
         kargs
-
         Returns
         -------
-
         """
         all_labels = []
         all_final_preds = []
@@ -370,14 +314,12 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         ----------
         true_labels: ground truth
         predicted_labels: predicted labels
-
         Returns
         -------
-
         """
         assert len(true_labels) == len(predicted_labels)
         results = {}
-
+        # import pdb;pdb.set_trace()
         fpr, tpr, thresholds = sklearn.metrics.roc_curve(true_labels, predicted_probs, pos_label=1)
         auc = sklearn.metrics.auc(fpr, tpr)
         f1_macro = f1_score(true_labels, predicted_labels, average='macro')
