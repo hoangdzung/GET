@@ -2,7 +2,7 @@ from . import units
 from .basic_preprocessor import BasicPreprocessor
 from .bow_preprocessor import BoWPreprocessor
 from .char_man_preprocessor import CharManPreprocessor
-
+from .bert_preprocessor import BertPreprocessor
 
 def list_available() -> list:
     from matchzoo.engine.base_preprocessor import BasePreprocessor

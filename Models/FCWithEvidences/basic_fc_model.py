@@ -9,7 +9,7 @@ from setting_keywords import KeyWordSettings
 import numpy as np
 from Models.BiDAF.wrapper import LSTM
 from thirdparty.self_attention import MultiHeadSelfAttentionICLR2017Extend
-
+from transformers import AutoModel
 
 class BasicFCModel(BaseModel):
     """
@@ -18,7 +18,11 @@ class BasicFCModel(BaseModel):
     def __init__(self, params):
         super(BaseModel, self).__init__()
         self._params = params
-        self.embedding = self._make_default_embedding_layer(params)
+        if self._params['embedding'] is not None:
+            self.embedding = self._make_default_embedding_layer(params)
+        else:
+            self.embedding = AutoModel.from_pretrained('bert-base-uncased')
+            self._params['embedding_output_dim'] = 768
         self.num_classes = self._params["num_classes"]
         self.fixed_length_right = self._params["fixed_length_right"]
         self.fixed_length_left = self._params["fixed_length_left"]

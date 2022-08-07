@@ -79,15 +79,21 @@ def fit_models(args):
         file_handler.myprint("Max query length, " + str(max_query_length) + " Max doc length " + str(max_doc_length))
         additional_data = {KeyWordSettings.OutputHandlerFactChecking: file_handler,
                            KeyWordSettings.GNN_Window: args.gnn_window_size}
-        preprocessor = mz.preprocessors.CharManPreprocessor(fixed_length_left = args.fixed_length_left,
+        # preprocessor = mz.preprocessors.CharManPreprocessor(fixed_length_left = args.fixed_length_left,
+        #                                                     fixed_length_right = args.fixed_length_right,
+        #                                                     fixed_length_left_src = args.fixed_length_left_src_chars,
+        #                                                     fixed_length_right_src = args.fixed_length_right_src_chars)
+        preprocessor = mz.preprocessors.BertPreprocessor(fixed_length_left = args.fixed_length_left,
                                                             fixed_length_right = args.fixed_length_right,
                                                             fixed_length_left_src = args.fixed_length_left_src_chars,
                                                             fixed_length_right_src = args.fixed_length_right_src_chars)
+
         t1 = time.time()
         print('parsing data')
         train_processed = preprocessor.fit_transform(train_pack)  # This is a DataPack
         valid_processed = preprocessor.transform(valid_pack)
         predict_processed = preprocessor.transform(predict_pack)
+        import pdb;pdb.set_trace()
         # print(train_processed.left.head())
 
         train_interactions = ClassificationInteractions(train_processed, **additional_data)
@@ -101,11 +107,12 @@ def fit_models(args):
 
         print("Loading word embeddings......")
         t1_emb = time.time()
-        term_index = preprocessor.context['vocab_unit'].state['term_index']
-        glove_embedding = mz.datasets.embeddings.load_glove_embedding_FC(dimension = args.word_embedding_size,
-                                                                         term_index = term_index, **additional_data)
+        # term_index = preprocessor.context['vocab_unit'].state['term_index']
+        # glove_embedding = mz.datasets.embeddings.load_glove_embedding_FC(dimension = args.word_embedding_size,
+        #                                                                  term_index = term_index, **additional_data)
 
-        embedding_matrix = glove_embedding.build_matrix(term_index)
+        # embedding_matrix = glove_embedding.build_matrix(term_index)
+        embedding_matrix = None
         entity_embs1 = entity_embedding.EntityEmbedding(args.claim_src_emb_size)
         claim_src_embs_matrix = entity_embs1.build_matrix(preprocessor.context['claim_source_unit'].state['term_index'])
 

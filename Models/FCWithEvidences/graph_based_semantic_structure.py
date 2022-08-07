@@ -9,6 +9,7 @@ from Models.BiDAF.wrapper import GGNN, GGNN_with_GSL, Linear
 from thirdparty.two_branches_attention import *
 import numpy as np
 import torch_utils as my_utils
+from transformers import AutoModel
 
 torch.set_printoptions(profile="full")
 
@@ -18,7 +19,13 @@ class Graph_basedSemantiStructure(BasicFCModel):
     def __init__(self, params):
         super(Graph_basedSemantiStructure, self).__init__(params)
         self._params = params
-        self.embedding = self._make_default_embedding_layer(params)
+        if self._params['embedding'] is not None:
+            self.embedding = self._make_default_embedding_layer(params)
+            self.is_bert = False
+        else:
+            self.embedding = AutoModel.from_pretrained('bert-base-uncased')
+            self._params['embedding_output_dim'] = 768
+            self.is_bert = True
         self.num_classes = self._params["num_classes"]
         self.fixed_length_right = self._params["fixed_length_right"]
         self.fixed_length_left = self._params["fixed_length_left"]
@@ -97,7 +104,11 @@ class Graph_basedSemantiStructure(BasicFCModel):
         doc = kargs[KeyWordSettings.DocContentNoPaddingEvidence]  # (n1 + n2 + n3 + .. n_b, R)
         doc_mask = (doc >= 1)  # (B1, R) 0 is for padding word
         doc_adj = kargs[KeyWordSettings.Evd_Docs_Adj].float()  # (n1 + n2 + n3 + .. n_b, R, R)
-        embed_doc = self.embedding(doc.long())  # (n1 + n2 + n3 + .. n_b, R, D)
+        # import pdb;pdb.set_trace()
+        if not self.is_bert:
+            embed_doc = self.embedding(doc.long())  # (n1 + n2 + n3 + .. n_b, R, D)
+        else:
+            embed_doc = self.embedding(doc.long(), doc_mask.int()).last_hidden_state  # (n1 + n2 + n3 + .. n_b, R, D)
         assert d_lens.shape[0] == embed_doc.size(0)
 
         # ggnn for query
@@ -129,8 +140,11 @@ class Graph_basedSemantiStructure(BasicFCModel):
         query_mask = (query > 0).unsqueeze(2)  # (B, L, 1)
         query_lens = kargs[KeyWordSettings.Query_lens]  # (B, )
         query_lens = query_lens.unsqueeze(-1)  # (B, 1)
-
-        embed_query = self.embedding(query.long())  # (B, L, D)
+        # import pdb;pdb.set_trace()
+        if not self.bert:
+            embed_query = self.embedding(query.long())  # (B, L, D)
+        else:
+            embed_query = self.embedding(query.long(), query_mask.squeeze(2).int()).last_hidden_state  # (B, L, D)
 
         # bilstm for query
         query_gru_hiddens = torch_utils.auto_rnn(self.query_bilstm, input_feats=embed_query, lens=q_lens,
