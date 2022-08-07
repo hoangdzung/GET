@@ -161,8 +161,10 @@ class Graph_basedSemantiStructure(BasicFCModel):
         query_lens = query_lens.unsqueeze(-1)  # (B, 1)
 
         adj = kargs[KeyWordSettings.Query_Adj].float()  # (B, L, L)
-        embed_query = self.embedding(query.long())  # (B, L, D)
-        query_gnn_hiddens = self.ggnn4claim_1(adj, embed_query)
+        if not self.bert:
+            embed_query = self.embedding(query.long())  # (B, L, D)
+        else:
+            embed_query = self.embedding(query.long(), query_mask.squeeze(2).int()).last_hidden_state  # (B, L, D)        query_gnn_hiddens = self.ggnn4claim_1(adj, embed_query)
 
         query_repr = torch.sum(query_gnn_hiddens * query_mask.float(), dim=1) / query_lens.float()  # (B,2*D)
         query_repr = self._pad_left_tensor(query_repr, **kargs)  # (n1 + n2 + n3 + .. + nx, H)
