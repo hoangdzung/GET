@@ -9,6 +9,7 @@ from Models.BiDAF.wrapper import GGNN, GGNN_with_GSL, Linear
 from thirdparty.two_branches_attention import *
 import numpy as np
 import torch_utils as my_utils
+from transformers import AutoModel
 
 torch.set_printoptions(profile="full")
 
@@ -102,12 +103,17 @@ class Graph_basedSemantiStructure(BasicFCModel):
         doc = kargs[KeyWordSettings.DocContentNoPaddingEvidence]  # (n1 + n2 + n3 + .. n_b, R)
         doc_mask = (doc >= 1)  # (B1, R) 0 is for padding word
         doc_adj = kargs[KeyWordSettings.Evd_Docs_Adj].float()  # (n1 + n2 + n3 + .. n_b, R, R)
+        query_adj = kargs[KeyWordSettings.Query_Adj].float()  # (n1 + n2 + n3 + .. n_b, L, L)
+        max_num_evd = kargs[KeyWordSettings.FIXED_NUM_EVIDENCES]
+        evd_count_per_query = kargs[KeyWordSettings.EvidenceCountPerQuery]
+        doc_source_idx = kargs[KeyWordSettings.DocSources]
+        
         # import pdb;pdb.set_trace()
         if not self.is_bert:
             embed_doc = self.embedding(doc.long())  # (n1 + n2 + n3 + .. n_b, R, D)
         else:
             embed_doc = self.embedding(doc.long(), doc_mask.int()).last_hidden_state  # (n1 + n2 + n3 + .. n_b, R, D)
-        assert d_lens.shape[0] == embed_doc.size(0)
+        # assert d_lens.shape[0] == embed_doc.size(0)
 
         # ggnn for query
         query_repr = self._generate_query_repr_gnn(query, query_adj, evd_count_per_query)  # output's shape is always (B1, self.hidden_size)
