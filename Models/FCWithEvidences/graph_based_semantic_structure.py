@@ -56,9 +56,9 @@ class Graph_basedSemantiStructure(BasicFCModel):
         D = self._params["embedding_output_dim"]
         
         # Graph Gated Neural Network with structural learning
-        self.ggnn4claim_1 = GGNN(in_features=D, out_features=self.hidden_size)
+        # self.ggnn4claim_1 = GGNN(in_features=D, out_features=self.hidden_size)
         
-        self.ggnn_with_gsl = GGNN_with_GSL(input_dim=D, hidden_dim=self.hidden_size, output_dim=self.hidden_size, rate=self.gsl_rate, dropout=self.dropout_gnn)
+        # self.ggnn_with_gsl = GGNN_with_GSL(input_dim=D, hidden_dim=self.hidden_size, output_dim=self.hidden_size, rate=self.gsl_rate, dropout=self.dropout_gnn)
             
         # mapping query vector + claim's source vector if possible. Experiments show that without using claims'
         # src, Politifact dataset has lower performance
@@ -102,24 +102,24 @@ class Graph_basedSemantiStructure(BasicFCModel):
         assert KeyWordSettings.DocContentNoPaddingEvidence in kargs
         doc = kargs[KeyWordSettings.DocContentNoPaddingEvidence]  # (n1 + n2 + n3 + .. n_b, R)
         doc_mask = (doc >= 1)  # (B1, R) 0 is for padding word
-        doc_adj = kargs[KeyWordSettings.Evd_Docs_Adj].float()  # (n1 + n2 + n3 + .. n_b, R, R)
-        query_adj = kargs[KeyWordSettings.Query_Adj].float()  # (n1 + n2 + n3 + .. n_b, L, L)
+        # doc_adj = kargs[KeyWordSettings.Evd_Docs_Adj].float()  # (n1 + n2 + n3 + .. n_b, R, R)
+        # query_adj = kargs[KeyWordSettings.Query_Adj].float()  # (n1 + n2 + n3 + .. n_b, L, L)
         max_num_evd = kargs[KeyWordSettings.FIXED_NUM_EVIDENCES]
         evd_count_per_query = kargs[KeyWordSettings.EvidenceCountPerQuery]
         doc_source_idx = kargs[KeyWordSettings.DocSources]
-        
+
         # import pdb;pdb.set_trace()
         if not self.is_bert:
-            embed_doc = self.embedding(doc.long())  # (n1 + n2 + n3 + .. n_b, R, D)
+            doc_out_ggnn = self.embedding(doc.long())  # (n1 + n2 + n3 + .. n_b, R, D)
         else:
-            embed_doc = self.embedding(doc.long(), doc_mask.int()).last_hidden_state  # (n1 + n2 + n3 + .. n_b, R, D)
+            doc_out_ggnn = self.embedding(doc.long(), doc_mask.int()).last_hidden_state  # (n1 + n2 + n3 + .. n_b, R, D)
         # assert d_lens.shape[0] == embed_doc.size(0)
 
         # ggnn for query
-        query_repr = self._generate_query_repr_gnn(query, query_adj, evd_count_per_query)  # output's shape is always (B1, self.hidden_size)
+        query_repr = self._generate_query_repr_gnn(query, evd_count_per_query)  # output's shape is always (B1, self.hidden_size)
         # import pdb;pdb.set_trace()
         # ggnn for doc
-        doc_out_ggnn = self.ggnn_with_gsl(doc_adj, embed_doc)
+        # doc_out_ggnn = self.ggnn_with_gsl(doc_adj, embed_doc)
         # import pdb;pdb.set_trace()
         # Step 1: word-level attention to simplify the graph
         avg, word_att_weights = self._word_level_attention(left_tsr=query_repr, right_tsr=doc_out_ggnn,
@@ -141,7 +141,7 @@ class Graph_basedSemantiStructure(BasicFCModel):
             return phi, (word_att_weights, evd_att_weight)
         return phi
 
-    def _generate_query_repr_gnn(self, queries: torch.Tensor, query_adjs:torch.Tensor, evd_count_per_query: torch.Tensor):
+    def _generate_query_repr_gnn(self, queries: torch.Tensor, evd_count_per_query: torch.Tensor):
         query_mask = (queries > 0).unsqueeze(2)  # (B, L, 1) # padded with zeros
         # query_lens = kargs[KeyWordSettings.Query_lens]  # (B, )
         # query_lens = query_lens.unsqueeze(-1)  # (B, 1) # this can be infered from query 
@@ -149,11 +149,11 @@ class Graph_basedSemantiStructure(BasicFCModel):
 
         # adj = kargs[KeyWordSettings.Query_Adj].float()  # (B, L, L)
         if not self.is_bert:
-            embed_queries = self.embedding(queries.long())  # (B, L, D)
+            query_gnn_hiddens = self.embedding(queries.long())  # (B, L, D)
         else:
-            embed_queries = self.embedding(queries.long(), query_mask.squeeze(2).int()).last_hidden_state  # (n1 + n2 + n3 + .. n_b, R, D)
+            query_gnn_hiddens = self.embedding(queries.long(), query_mask.squeeze(2).int()).last_hidden_state  # (n1 + n2 + n3 + .. n_b, R, D)
 
-        query_gnn_hiddens = self.ggnn4claim_1(query_adjs, embed_queries)
+        # query_gnn_hiddens = self.ggnn4claim_1(query_adjs, embed_queries)
         # import pdb;pdb.set_trace()
         query_repr = torch.sum(query_gnn_hiddens * query_mask.float(), dim=1) / query_lens.float()  # (B, D)
         query_repr = self._pad_left_tensor(query_repr, evd_count_per_query)  # (n1 + n2 + n3 + .. + nx, H)

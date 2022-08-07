@@ -91,21 +91,25 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
                 # import pdb;pdb.set_trace()
                 batch_query_content = my_utils.gpu(torch.from_numpy(batch_query_content), self._use_cuda)
                 batch_query_sources = my_utils.gpu(torch.from_numpy(batch_query_sources), self._use_cuda)
-                batch_query_adj = my_utils.gpu(torch.from_numpy(batch_query_adj), self._use_cuda)
+                # batch_query_adj = my_utils.gpu(torch.from_numpy(batch_query_adj), self._use_cuda)
 
                 batch_evd_contents = my_utils.gpu(torch.from_numpy(batch_evd_contents), self._use_cuda)
                 batch_evd_sources = my_utils.gpu(torch.from_numpy(batch_evd_sources), self._use_cuda)
                 batch_evd_cnt_each_query = my_utils.gpu(torch.from_numpy(batch_evd_cnt_each_query), self._use_cuda)
 
                 batch_labels = my_utils.gpu(torch.from_numpy(batch_labels), self._use_cuda)
-                batch_evd_docs_adj = my_utils.gpu(torch.from_numpy(batch_evd_docs_adj), self._use_cuda)
+                # batch_evd_docs_adj = my_utils.gpu(torch.from_numpy(batch_evd_docs_adj), self._use_cuda)
 
                 self._optimizer.zero_grad()
                 if self._loss in ["bpr", "hinge", "pce", "bce", "cross_entropy",
                                   "vanilla_cross_entropy", "regression_loss", "masked_cross_entropy"]:
                     loss = self._get_multiple_evidences_predictions_normal(
-                        batch_query_content, batch_query_adj, batch_query_sources,
-                        batch_evd_contents, batch_evd_docs_adj, batch_evd_sources,
+                        batch_query_content, 
+                        # batch_query_adj, 
+                        batch_query_sources,
+                        batch_evd_contents,
+                        # batch_evd_docs_adj, 
+                        batch_evd_sources,
                         batch_labels, self.fixed_num_evidences, batch_evd_cnt_each_query)
 
                 # print("Loss: ", loss)
@@ -152,10 +156,10 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
 
     def _get_multiple_evidences_predictions_normal(self,
                                                    query_contents: torch.Tensor,
-                                                   query_adj: torch.Tensor,
+                                                #    query_adj: torch.Tensor,
                                                    query_sources: torch.Tensor,
                                                    evd_doc_contents: torch.Tensor,
-                                                   evd_docs_adj: torch.Tensor,
+                                                #    evd_docs_adj: torch.Tensor,
                                                    evd_sources: torch.Tensor,
                                                    labels: np.ndarray,
                                                    n: int, evd_count_per_query: torch.Tensor) -> torch.Tensor:
@@ -180,14 +184,15 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         # evd_docs_adj = kargs[KeyWordSettings.Evd_Docs_Adj]
 
         e_conts, e_adj = [], []
-        for evd_cnt, evd_doc_cont, evd_adj in zip(evd_count_per_query, evd_doc_contents, evd_docs_adj):
+        # for evd_cnt, evd_doc_cont, evd_adj in zip(evd_count_per_query, evd_doc_contents, evd_docs_adj):
+        for evd_cnt, evd_doc_cont in zip(evd_count_per_query, evd_doc_contents):
             evd_cnt = int(torch_utils.cpu(evd_cnt).detach().numpy())
             e_conts.append(evd_doc_cont[:evd_cnt, :])  # stacking later
-            e_adj.append(evd_adj[:evd_cnt])
+            # e_adj.append(evd_adj[:evd_cnt])
 
         # # concat
         e_conts = torch.cat(e_conts, dim=0)  # (n1 + n2 + ..., R)
-        e_adj = torch.cat(e_adj, dim=0)     # (n1 + n2 + ..., R, R)
+        # e_adj = torch.cat(e_adj, dim=0)     # (n1 + n2 + ..., R, R)
         # import pdb;pdb.set_trace()
         additional_paramters = {
             KeyWordSettings.QuerySources: query_sources,
@@ -195,8 +200,8 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
             KeyWordSettings.DocContentNoPaddingEvidence: e_conts,
             KeyWordSettings.EvidenceCountPerQuery: evd_count_per_query,
             KeyWordSettings.FIXED_NUM_EVIDENCES: n,
-            KeyWordSettings.Query_Adj: query_adj,
-            KeyWordSettings.Evd_Docs_Adj: e_adj                       # flatten->(n1 + n2 ..., R, R)
+            # KeyWordSettings.Query_Adj: query_adj,
+            # KeyWordSettings.Evd_Docs_Adj: e_adj                       # flatten->(n1 + n2 ..., R, R)
         }
 
         # (B,)

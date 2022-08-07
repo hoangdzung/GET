@@ -348,7 +348,8 @@ class ClassificationInteractions(BaseClassificationInteractions):
                for i in range(fixed_length)]
         words_list.extend([0 for _ in range(fixed_length-length_)])
         adj = _laplacian_normalize(np.array(adj))
-        return words_list, adj, length_
+        # return words_list, adj, length_
+        return raw_text, adj, length
 
     def convert_relations(self, relation: pd.DataFrame):
         """ Convert relations.
