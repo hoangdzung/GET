@@ -12,6 +12,7 @@ from .units import Vocabulary
 from .units import StatefulUnit
 tqdm.pandas()
 from transformers import AutoTokenizer
+import pandas as pd 
 
 class BertPreprocessor(BasePreprocessor):
     """
@@ -70,19 +71,25 @@ class BertPreprocessor(BasePreprocessor):
         self._fixed_length_left_src = fixed_length_left_src
         self._fixed_length_right_src = fixed_length_right_src
         self._left_fixedlength_unit = units.FixedLength(
-            self._fixed_length_left+2,
+            self._fixed_length_left,
             pad_mode='post'
         )
         self._right_fixedlength_unit = units.FixedLength(
-            self._fixed_length_right+2,
+            self._fixed_length_right,
             pad_mode='post'
         )
         # for padding character level of left_source and right_source
         self._left_char_src_fixedlength_unit = units.FixedLength(self._fixed_length_left_src, pad_mode='post')
         self._right_char_src_fixedlength_unit = units.FixedLength(self._fixed_length_right_src, pad_mode='post')
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
-        self._units = {'left': lambda x: self.tokenizer(x,truncation=True,max_length=self._fixed_length_left)['input_ids'],
-                        'right': lambda x: self.tokenizer(x,truncation=True,max_length=self._fixed_length_right)['input_ids']}
+        def _bert_tokenize(sen, max_length):
+            sen = sen.split()
+            tokenized_inputs = self.tokenizer(sen, truncation=True, is_split_into_words=True, max_length=max_length, padding='max_length')
+            # print([sen, tokenized_inputs['input_ids'], tokenized_inputs.word_ids(batch_index=0)])
+            return pd.Series([sen, tokenized_inputs['input_ids'], tokenized_inputs.word_ids(batch_index=0)])
+
+        self._units = {'left': lambda x: _bert_tokenize(x, self._fixed_length_left),
+                        'right': lambda x: _bert_tokenize(x, self._fixed_length_right)}
 
     def fit(self, data_pack: DataPack, verbose: int = 1):
         """
@@ -166,8 +173,8 @@ class BertPreprocessor(BasePreprocessor):
         # data_pack.apply_on_text(self._right_fixedlength_unit.transform,
         #                         mode='right', inplace=True, verbose=verbose)
 
-        data_pack.apply_on_text(self._units['left'], mode='left',inplace=True, verbose=verbose)
-        data_pack.apply_on_text(self._units['right'], mode='right',inplace=True, verbose=verbose)
+        data_pack.apply_on_text(self._units['left'], rename=['text_left', 'input_ids_left', 'word_ids_left'], mode='left',inplace=True, verbose=verbose)
+        data_pack.apply_on_text(self._units['right'], rename=['text_right', 'input_ids_right', 'word_ids_right'], mode='right',inplace=True, verbose=verbose)
 
         data_pack.apply_on_text(lambda x : len(x), rename=('length_left', 'length_right'),
                            inplace=True, verbose=verbose)
@@ -176,8 +183,8 @@ class BertPreprocessor(BasePreprocessor):
         data_pack.apply_on_text(self._right_fixedlength_unit.transform,
                                 mode='right', inplace=True, verbose=verbose)
 
-        max_len_left = self._fixed_length_left+2
-        max_len_right = self._fixed_length_right+2
+        max_len_left = self._fixed_length_left
+        max_len_right = self._fixed_length_right
 
         data_pack.left['length_left'] = \
             data_pack.left['length_left'].apply(

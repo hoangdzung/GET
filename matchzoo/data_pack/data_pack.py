@@ -393,7 +393,7 @@ class DataPack(object):
     def _apply_on_text_right(self, func, rename, verbose=1):
         name = rename or 'text_right'
         if verbose:
-            tqdm.pandas(desc="Processing " + name + " with " + func.__name__)
+            tqdm.pandas(desc="Processing " + str(name) + " with " + func.__name__)
             self._right[name] = self._right['text_right'].progress_apply(func)
         else:
             self._right[name] = self._right['text_right'].apply(func)
@@ -401,7 +401,7 @@ class DataPack(object):
     def _apply_on_text_left(self, func, rename, verbose=1):
         name = rename or 'text_left'
         if verbose:
-            tqdm.pandas(desc="Processing " + name + " with " + func.__name__)
+            tqdm.pandas(desc="Processing " + str(name) + " with " + func.__name__)
             self._left[name] = self._left['text_left'].progress_apply(func)
         else:
             self._left[name] = self._left['text_left'].apply(func)

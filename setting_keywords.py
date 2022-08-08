@@ -15,7 +15,9 @@ class KeyWordSettings(object):
     Ranked_Docs = "ranked_docs"
     Query_Content = "query_content"
     Query_Adj = "query_adj"
+    Query_Emb_Transformer = "query_trans"
     Evd_Docs_Adj = "docs_adj"
+    Evd_Docs_Emb_Transformer = "docs_trans"
     GNN_Window = "gnn_window"
 
     Query_lens = "query_lens"

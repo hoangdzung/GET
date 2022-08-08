@@ -195,9 +195,11 @@ class BaseClassificationInteractions(object):
         self.dict_claim_source, \
         self.dict_raw_claim_source, \
         self.dict_char_left_src, \
-        self.dict_query_adj = self.convert_leftright(data_pack.left, text_key="text_left",
+        self.dict_query_adj,\
+        self.dict_query_emb_transformer = self.convert_leftright(data_pack.left, text_key="text_left",
                                                      length_text_key="length_left", raw_text_key="raw_text_left",
                                                      source_key="claim_source", raw_source_key="raw_claim_source",
+                                                     word_ids_key='word_ids_left',input_ids_key='input_ids_left',
                                                      **additional_field)
         self.data_pack = data_pack
         assert len(self.unique_query_ids) == len(set(self.unique_query_ids)), "Must be unique ids"
@@ -212,10 +214,13 @@ class BaseClassificationInteractions(object):
         self.dict_evd_source, \
         self.dict_raw_evd_source, \
         self.dict_char_right_src, \
-        self.dict_doc_adj = self.convert_leftright(data_pack.right, text_key="text_right",
+        self.dict_doc_adj,\
+        self.dict_doc_emb_transformer = self.convert_leftright(data_pack.right, text_key="text_right",
                                                    length_text_key="length_right",
                                                    raw_text_key="raw_text_right", source_key="evidence_source",
-                                                   raw_source_key="raw_evidence_source", **additional_field)
+                                                   raw_source_key="raw_evidence_source", 
+                                                   word_ids_key='word_ids_right',input_ids_key='input_ids_right',
+                                                   **additional_field)
 
         assert len(self.unique_doc_ids) == len(set(self.unique_doc_ids)), "Must be unique ids for doc ids"
         assert len(self.unique_query_ids) != len(
@@ -286,6 +291,7 @@ class ClassificationInteractions(BaseClassificationInteractions):
         self.np_query_char_source = np.array([self.dict_char_left_src[q] for q in self.claims])
         self.query_positions = np.array([self.dict_query_positions[q] for q in self.claims])
         self.np_query_adj = np.array([self.dict_query_adj[q] for q in self.claims])  # query_adj matrix
+        self.np_query_emb_transformer = np.array([self.dict_query_emb_transformer[q] for q in self.claims])  # query_adj matrix
 
         # assert self.np_query_lengths.shape == self.np_doc_lengths.shape
         self.padded_doc_length = len(self.dict_doc_contents[self.unique_doc_ids[0]])
@@ -293,12 +299,13 @@ class ClassificationInteractions(BaseClassificationInteractions):
         # self.padded_query_length = len(self.np_query_contents[0])
 
     def convert_leftright(self, part: pd.DataFrame, text_key: str, length_text_key: str, raw_text_key: str,
-                          source_key: str, raw_source_key: str, **kargs):
+                          source_key: str, raw_source_key: str, word_ids_key:str, input_ids_key: str, **kargs):
         """ Converting the dataframe of interactions
         Compress the text & build GAT adjacent matrix
         """
         ids, contents_dict, lengths_dict, position_dict = [], {}, {}, {}
         raw_content_dict, sources, raw_sources, char_sources = {}, {}, {}, {}
+        dict_emb_transformer = {}
         dict_adj = {}
         fixed_length = 30 if text_key == 'text_left' else 100
         char_source_key = kargs[KeyWordSettings.FCClass.CharSourceKey]
@@ -308,8 +315,9 @@ class ClassificationInteractions(BaseClassificationInteractions):
 
         for index, row in part.iterrows():  # very dangerous, be careful because it may change order!!!
             ids.append(index)
-            text_, adj, length_ = self.convert_text(row[text_key], fixed_length, row[length_text_key],
-                                                    kargs[KeyWordSettings.GNN_Window])
+            _, adj, length_, emb_transformer = self.convert_text(row[text_key], fixed_length, row[length_text_key],
+                                                    kargs[KeyWordSettings.GNN_Window], row[word_ids_key])
+            text_ = row[input_ids_key]
             # if fixed_length==100:
             #     # contain raw text to lstm
             #     text_ = row[text_key]  # text_ here is converted to numbers and padded
@@ -327,11 +335,13 @@ class ClassificationInteractions(BaseClassificationInteractions):
             raw_sources[index] = row[raw_source_key]
             char_sources[index] = row[char_source_key]
             dict_adj[index] = adj
+            dict_emb_transformer[index] = emb_transformer
 
         return np.array(ids), contents_dict, lengths_dict, raw_content_dict, \
-               position_dict, sources, raw_sources, char_sources, dict_adj
+               position_dict, sources, raw_sources, char_sources, dict_adj,\
+               dict_emb_transformer
 
-    def convert_text(self, raw_text, fixed_length, length, window_size=5):
+    def convert_text(self, raw_text, fixed_length, length, window_size=5, word_ids=None):
         words_list = list(set(raw_text[:length]))       # remove duplicate words in original order
         words_list.sort(key=raw_text.index)
         words2id = {word: id for id, word in enumerate(words_list)}
@@ -348,7 +358,20 @@ class ClassificationInteractions(BaseClassificationInteractions):
                for i in range(fixed_length)]
         words_list.extend([0 for _ in range(fixed_length-length_)])
         adj = _laplacian_normalize(np.array(adj))
-        return words_list, adj, length_
+
+        if word_ids is not None:
+            idx2bertidxs = collections.defaultdict(list)
+            for i, word_id in enumerate(word_ids):
+                if word_id:
+                    idx2bertidxs[words2id[raw_text[word_id]]].append(i)
+
+            emb_transformer = np.zeros((fixed_length, fixed_length))
+            for idx, bertidxs in idx2bertidxs.items():
+                emb_transformer[idx-1][bertidxs] = 1.0/len(bertidxs)   
+            emb_transformer = emb_transformer.tolist()
+        else:
+            emb_transformer = None
+        return words_list, adj, length_, emb_transformer
 
     def convert_relations(self, relation: pd.DataFrame):
         """ Convert relations.
@@ -368,13 +391,14 @@ class ClassificationInteractions(BaseClassificationInteractions):
             doc = row["id_right"]
             label = row["label"]
             # assert label == 0 or label == 1
-            unique_queries[query] = unique_queries.get(query, [[], [], [], [], []])  # doc, label, content, length
-            a, b, c, d, e = unique_queries[query]
+            unique_queries[query] = unique_queries.get(query, [[], [], [], [], [], []])  # doc, label, content, length
+            a, b, c, d, e, f = unique_queries[query]
             a.append(doc)
             b.append(label)
             c.append(self.dict_doc_contents[doc])
             d.append(self.dict_doc_lengths[doc])
             e.append(self.dict_doc_adj[doc])
+            f.append(self.dict_doc_emb_transformer[doc])
 
             if query not in set_queries:
                 queries.append(query)  # same as unique_queries

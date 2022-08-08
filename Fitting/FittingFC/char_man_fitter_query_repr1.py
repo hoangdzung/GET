@@ -66,32 +66,33 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
             # ------ Move to here ----------------------------------- #
             self._net.train(True)
             # for each query/claim, sample self.fixed_num_evidences evidences
-            query_ids, left_contents, left_lengths, query_sources, query_char_sources, query_adj, \
+            query_ids, left_contents, left_lengths, query_sources, query_char_sources, query_adj, query_emb_transformer, \
             evd_docs_ids, evd_docs_contents, evd_docs_lens, evd_sources, evd_cnt_each_query, evd_char_sources, \
-            pair_labels, evd_docs_adj = self._sampler.get_train_instances_char_man(train_iteractions,
+            pair_labels, evd_docs_adj, evd_docs_emb_transformer = self._sampler.get_train_instances_char_man(train_iteractions,
                                                                                    self.fixed_num_evidences)
 
             # shuffle batch 
-            _, query_content, _, query_sources, _, query_adj, \
+            _, query_content, _, query_sources, _, query_adj, query_emb_transformer, \
             _, evd_docs_contents, _, evd_sources, evd_cnt_each_query, _, \
-            pair_labels, evd_docs_adj = my_utils.shuffle(query_ids, left_contents, left_lengths, query_sources,
-                                                         query_char_sources, query_adj, evd_docs_ids, evd_docs_contents,
+            pair_labels, evd_docs_adj, evd_docs_emb_transformer = my_utils.shuffle(query_ids, left_contents, left_lengths, query_sources,
+                                                         query_char_sources, query_adj,query_emb_transformer, evd_docs_ids, evd_docs_contents,
                                                          evd_docs_lens, evd_sources, evd_cnt_each_query,
-                                                         evd_char_sources, pair_labels, evd_docs_adj)
+                                                         evd_char_sources, pair_labels, evd_docs_adj, evd_docs_emb_transformer)
             epoch_loss, total_pairs = 0.0, 0
             t1 = time.time()
             for (minibatch_num,
-                 (batch_query_content,batch_query_sources, batch_query_adj, 
-                 batch_evd_contents, batch_evd_sources,batch_evd_docs_adj,
+                 (batch_query_content,batch_query_sources, batch_query_adj, batch_query_emb_transformer, 
+                 batch_evd_contents, batch_evd_sources,batch_evd_docs_adj, batch_evd_docs_emb_transformer,
                   batch_evd_cnt_each_query,batch_labels)) \
-                    in enumerate(my_utils.minibatch(query_content, query_sources, query_adj,
-                                                    evd_docs_contents,evd_sources, evd_docs_adj,
+                    in enumerate(my_utils.minibatch(query_content, query_sources, query_adj,query_emb_transformer,
+                                                    evd_docs_contents,evd_sources, evd_docs_adj,evd_docs_emb_transformer,
                                                     evd_cnt_each_query, pair_labels,
                                                     batch_size=self._batch_size)):
                 # import pdb;pdb.set_trace()
                 batch_query_content = my_utils.gpu(torch.from_numpy(batch_query_content), self._use_cuda)
                 batch_query_sources = my_utils.gpu(torch.from_numpy(batch_query_sources), self._use_cuda)
                 batch_query_adj = my_utils.gpu(torch.from_numpy(batch_query_adj), self._use_cuda)
+                batch_query_emb_transformer = my_utils.gpu(torch.from_numpy(batch_query_emb_transformer), self._use_cuda)
 
                 batch_evd_contents = my_utils.gpu(torch.from_numpy(batch_evd_contents), self._use_cuda)
                 batch_evd_sources = my_utils.gpu(torch.from_numpy(batch_evd_sources), self._use_cuda)
@@ -99,13 +100,14 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
 
                 batch_labels = my_utils.gpu(torch.from_numpy(batch_labels), self._use_cuda)
                 batch_evd_docs_adj = my_utils.gpu(torch.from_numpy(batch_evd_docs_adj), self._use_cuda)
+                batch_evd_docs_emb_transformer = my_utils.gpu(torch.from_numpy(batch_evd_docs_emb_transformer), self._use_cuda)
 
                 self._optimizer.zero_grad()
                 if self._loss in ["bpr", "hinge", "pce", "bce", "cross_entropy",
                                   "vanilla_cross_entropy", "regression_loss", "masked_cross_entropy"]:
                     loss = self._get_multiple_evidences_predictions_normal(
-                        batch_query_content, batch_query_adj, batch_query_sources,
-                        batch_evd_contents, batch_evd_docs_adj, batch_evd_sources,
+                        batch_query_content, batch_query_adj, batch_query_emb_transformer, batch_query_sources,
+                        batch_evd_contents, batch_evd_docs_adj, batch_evd_docs_emb_transformer, batch_evd_sources,
                         batch_labels, self.fixed_num_evidences, batch_evd_cnt_each_query)
 
                 # print("Loss: ", loss)
@@ -153,9 +155,11 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
     def _get_multiple_evidences_predictions_normal(self,
                                                    query_contents: torch.Tensor,
                                                    query_adj: torch.Tensor,
+                                                   query_emb_transformer: torch.Tensor,
                                                    query_sources: torch.Tensor,
                                                    evd_doc_contents: torch.Tensor,
                                                    evd_docs_adj: torch.Tensor,
+                                                   evd_docs_emb_transformer : torch.Tensor,
                                                    evd_sources: torch.Tensor,
                                                    labels: np.ndarray,
                                                    n: int, evd_count_per_query: torch.Tensor) -> torch.Tensor:
@@ -179,15 +183,17 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         """
         # evd_docs_adj = kargs[KeyWordSettings.Evd_Docs_Adj]
 
-        e_conts, e_adj = [], []
+        e_conts, e_adj, e_emb_transformer = [], [], []
         for evd_cnt, evd_doc_cont, evd_adj in zip(evd_count_per_query, evd_doc_contents, evd_docs_adj):
             evd_cnt = int(torch_utils.cpu(evd_cnt).detach().numpy())
             e_conts.append(evd_doc_cont[:evd_cnt, :])  # stacking later
             e_adj.append(evd_adj[:evd_cnt])
+            e_emb_transformer.append(evd_docs_emb_transformer[:evd_cnt])
 
         # # concat
         e_conts = torch.cat(e_conts, dim=0)  # (n1 + n2 + ..., R)
         e_adj = torch.cat(e_adj, dim=0)     # (n1 + n2 + ..., R, R)
+        e_emb_transformer = torch.cat(e_emb_transformer, dim=0)     # (n1 + n2 + ..., R, R)
         # import pdb;pdb.set_trace()
         additional_paramters = {
             KeyWordSettings.QuerySources: query_sources,
@@ -196,7 +202,9 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
             KeyWordSettings.EvidenceCountPerQuery: evd_count_per_query,
             KeyWordSettings.FIXED_NUM_EVIDENCES: n,
             KeyWordSettings.Query_Adj: query_adj,
-            KeyWordSettings.Evd_Docs_Adj: e_adj                       # flatten->(n1 + n2 ..., R, R)
+            KeyWordSettings.Query_Emb_Transformer: query_emb_transformer,
+            KeyWordSettings.Evd_Docs_Adj: e_adj,                        # flatten->(n1 + n2 ..., R, R)
+            KeyWordSettings.Evd_Docs_Emb_Transformer: e_emb_transformer,                       # flatten->(n1 + n2 ..., R, R)
         }
 
         # (B,)
