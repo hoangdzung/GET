@@ -5,7 +5,7 @@ import matchzoo
 import collections
 from setting_keywords import KeyWordSettings
 from handlers.output_handler import FileHandler
-
+from scipy import sparse
 
 
 def _laplacian_normalize(adj):
@@ -368,7 +368,7 @@ class ClassificationInteractions(BaseClassificationInteractions):
             emb_transformer = np.zeros((fixed_length, fixed_length))
             for idx, bertidxs in idx2bertidxs.items():
                 emb_transformer[idx-1][bertidxs] = 1.0/len(bertidxs)   
-            emb_transformer = emb_transformer.tolist()
+            emb_transformer = sparse.csr_matrix(emb_transformer)
         else:
             emb_transformer = None
         return words_list, adj, length_, emb_transformer
