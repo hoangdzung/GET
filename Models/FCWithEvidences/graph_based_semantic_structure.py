@@ -103,9 +103,9 @@ class Graph_basedSemantiStructure(BasicFCModel):
         doc = kargs[KeyWordSettings.DocContentNoPaddingEvidence]  # (n1 + n2 + n3 + .. n_b, R)
         doc_mask = (doc >= 1)  # (B1, R) 0 is for padding word
         doc_adj = kargs[KeyWordSettings.Evd_Docs_Adj].float()  # (n1 + n2 + n3 + .. n_b, R, R)
-        doc_emb_transformer = kargs[KeyWordSettings.Evd_Docs_Emb_Transformer].float()  # (n1 + n2 + n3 + .. n_b, R, R)
+        # doc_emb_transformer = kargs[KeyWordSettings.Evd_Docs_Emb_Transformer].float()  # (n1 + n2 + n3 + .. n_b, R, R)
         query_adj = kargs[KeyWordSettings.Query_Adj].float()  # (n1 + n2 + n3 + .. n_b, L, L)
-        query_emb_transformer = kargs[KeyWordSettings.Query_Emb_Transformer].float()  # (n1 + n2 + n3 + .. n_b, L, L)
+        # query_emb_transformer = kargs[KeyWordSettings.Query_Emb_Transformer].float()  # (n1 + n2 + n3 + .. n_b, L, L)
         max_num_evd = kargs[KeyWordSettings.FIXED_NUM_EVIDENCES]
         evd_count_per_query = kargs[KeyWordSettings.EvidenceCountPerQuery]
         doc_source_idx = kargs[KeyWordSettings.DocSources]

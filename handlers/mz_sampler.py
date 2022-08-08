@@ -133,7 +133,7 @@ class Sampler(object):
         # query_adj = np.zeros((query_ids.shape[0], query_contents.shape[1], query_contents.shape[1]), np.int64)
         # query_adj = interactions.np_query_adj.astype(np.int64)
         query_adj = interactions.np_query_adj
-        query_emb_transformer = interactions.np_query_emb_transformer
+        # query_emb_transformer = interactions.np_query_emb_transformer
 
         evd_docs_ids = np.zeros((query_ids.shape[0], fixed_num_evidences), np.int64) - 1  # all indices are -1
         # by default it is all pad tokens
@@ -146,8 +146,8 @@ class Sampler(object):
                                                   interactions.padded_doc_char_source_length), np.int64)
         evd_docs_adj = np.zeros((query_ids.shape[0], fixed_num_evidences, interactions.padded_doc_length,
                                  interactions.padded_doc_length), np.float)
-        evd_docs_emb_transformer = np.zeros((query_ids.shape[0], fixed_num_evidences, interactions.padded_doc_length,
-                                 interactions.padded_doc_length), np.float)
+        # evd_docs_emb_transformer = np.zeros((query_ids.shape[0], fixed_num_evidences, interactions.padded_doc_length,
+        #                          interactions.padded_doc_length), np.float)
         for i, u in enumerate(query_ids):
             evidences_info = interactions.dict_claims_and_evidences_test[u]  # use u not i
             assert len(evidences_info) <= fixed_num_evidences
@@ -160,7 +160,7 @@ class Sampler(object):
                 evd_sources[i][idx] = interactions.dict_evd_source[doc_id][0]  # -1 since we have an array size 1
                 evd_docs_char_source_contents[i][idx] = interactions.dict_char_right_src[doc_id]
                 evd_docs_adj[i][idx] = interactions.dict_doc_adj[doc_id]
-                evd_docs_emb_transformer[i][idx] = interactions.dict_doc_emb_transformer[doc_id]
+                # evd_docs_emb_transformer[i][idx] = interactions.dict_doc_emb_transformer[doc_id]
                 # for row in range(doc_len):
                 #     evd_docs_adj[i, idx, row, max(0, row-2):min(row+3, doc_len)] = 1
                 #     for col in range(row+3, doc_len):
@@ -174,6 +174,9 @@ class Sampler(object):
         #         for j in range(i + 3, l):
         #             query_adj[b][i][j] = query_adj[b][j][i] = (query_contents[b][i] == query_contents[b][j])
 
-        return query_ids, query_contents, query_lengths, query_sources, query_char_source, query_adj, query_emb_transformer, \
+        # return query_ids, query_contents, query_lengths, query_sources, query_char_source, query_adj, query_emb_transformer, \
+        #        evd_docs_ids, evd_docs_contents, evd_docs_lens, evd_sources, evd_cnt_each_query, \
+        #        evd_docs_char_source_contents, query_labels, evd_docs_adj, evd_docs_emb_transformer
+        return query_ids, query_contents, query_lengths, query_sources, query_char_source, query_adj, \
                evd_docs_ids, evd_docs_contents, evd_docs_lens, evd_sources, evd_cnt_each_query, \
-               evd_docs_char_source_contents, query_labels, evd_docs_adj, evd_docs_emb_transformer
+               evd_docs_char_source_contents, query_labels, evd_docs_adj
