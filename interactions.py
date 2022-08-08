@@ -361,14 +361,18 @@ class ClassificationInteractions(BaseClassificationInteractions):
         # words2id = {word: id for id, word in enumerate(words_list)}
 
         length_ = len(words_list)
-        neighbours = [set() for _ in range(length_)]
+        # neighbours = [set() for _ in range(length_)]
+        neighbours = [dict() for _ in range(length_)]
         # window_size = window_size if fixed_length == 30 else 300
         for i in range(length):
             for j in range(max(i-window_size+1, 0), min(i+window_size, length)):
-                neighbours[pos2id[i]].add(pos2id[j])
+                # neighbours[pos2id[i]].add(pos2id[j])
+                neighbours[pos2id[i]][pos2id[j]] = neighbours[pos2id[i]].get(pos2id[j], 0) + 1
 
         # gat graph
-        adj = [[1 if (max(i, j) < length_) and (j in neighbours[i]) else 0 for j in range(fixed_length)]
+        # adj = [[1 if (max(i, j) < length_) and (j in neighbours[i]) else 0 for j in range(fixed_length)]
+        #        for i in range(fixed_length)]
+        adj = [[neighbours[i].get(j,0) if (max(i, j) < length_) else 0 for j in range(fixed_length)]
                for i in range(fixed_length)]
         words_list.extend([0 for _ in range(fixed_length-length_)])
         adj = _laplacian_normalize(np.array(adj))
