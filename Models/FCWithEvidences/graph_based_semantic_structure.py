@@ -124,6 +124,53 @@ class Graph_basedSemantiStructure(BasicFCModel):
             return phi, (word_att_weights, evd_att_weight)
         return phi
 
+    def get_embeddings(self, query: torch.Tensor, document: torch.Tensor, verbose=False, **kargs):
+        """
+        query and document have shaped as described. Each query is assumed to have `n = 30` evidences. If a query has
+        less than 30 evidences, I pad them with all zeros. The length of all-zeros evidence is 0. However, PyTorch
+        does not allow empty sequences input to RNN. Therefore, I have to use
+        `kargs[KeyWordSettings.QueryContentNoPaddingEvidence]` and `kargs[KeyWordSettings.DocContentNoPaddingEvidence]`
+        with shape (n1 + n2 + ... + nx, L) and (n1 + n2 + ... + nx, R) respectively.
+        Parameters
+        ----------
+        query: `torch.Tensor`  (B, L)
+        document: `torch.Tensor` (B, n = 30, R)
+        """
+        assert KeyWordSettings.Query_lens in kargs and KeyWordSettings.Doc_lens in kargs
+        _, L = query.size()
+        D = self._params["embedding_output_dim"]
+        assert query.size(0) == document.size(0)
+        batch_size, n, R = document.size()  # batch_size = 32 which is real batch_size of each of mini-batches
+        assert n == 30
+        # for documents
+        d_new_indices, d_restoring_indices, d_lens = kargs[KeyWordSettings.DocLensIndices]
+        assert KeyWordSettings.DocContentNoPaddingEvidence in kargs
+        doc = kargs[KeyWordSettings.DocContentNoPaddingEvidence]  # (n1 + n2 + n3 + .. n_b, R)
+        doc_mask = (doc >= 1)  # (B1, R) 0 is for padding word
+        doc_adj = kargs[KeyWordSettings.Evd_Docs_Adj].float()  # (n1 + n2 + n3 + .. n_b, R, R)
+        embed_doc = self.embedding(doc.long())  # (n1 + n2 + n3 + .. n_b, R, D)
+        assert d_lens.shape[0] == embed_doc.size(0)
+
+        # ggnn for query
+        query_repr = self._generate_query_repr_gnn(query, **kargs)  # output's shape is always (B1, self.hidden_size)
+        
+        # ggnn for doc
+        doc_out_ggnn = self.ggnn_with_gsl(doc_adj, embed_doc)
+        
+        # Step 1: word-level attention
+        avg, word_att_weights = self._word_level_attention(left_tsr=query_repr, right_tsr=doc_out_ggnn,
+                                                           right_mask=doc_mask, **kargs)
+        # Step 2: evidence-level attention. We will override this function in sub-classes
+        if self.use_claim_source:
+            query_source_idx = kargs[KeyWordSettings.QuerySources]
+            claim_embs = self.claim_source_embs(query_source_idx.long())  # (B, 1, D)
+            claim_embs = claim_embs.squeeze(1)  # (B, D)
+            claim_embs = self._pad_left_tensor(claim_embs, **kargs)
+            query_repr = torch.cat([claim_embs, query_repr], dim=-1)  # (B, 2D + D)
+        avg, evd_att_weight = self._evidence_level_attention_new(query_repr, avg, document, **kargs)
+        output = self._get_final_repr(left_tsr=query_repr, right_tsr=avg, **kargs)
+        return self.out[0](output)
+
     def _generate_query_repr(self, query: torch.Tensor, **kargs):
         q_new_indices, q_restoring_indices, q_lens = kargs[KeyWordSettings.QueryLensIndices]
         query_mask = (query > 0).unsqueeze(2)  # (B, L, 1)

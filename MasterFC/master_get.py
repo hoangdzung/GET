@@ -19,7 +19,8 @@ from handlers.output_handler_FC import FileHandlerFC
 from Evaluation import mzEvaluator as evaluator
 from setting_keywords import KeyWordSettings
 from matchzoo.embedding import entity_embedding
-
+import pickle
+import sys
 
 def fit_models(args):
     if not os.path.exists(args.log):
@@ -161,11 +162,14 @@ def fit_models(args):
             dev_results, test_results = fit_model.load_best_model(valid_interactions, test_interactions)
             kfold_dev_results.append(dev_results)
             kfold_test_results.append(test_results)
+            embeddings_dict = fit_model.get_all_embeddings(train_interactions, valid_interactions, test_interactions)
+            pickle.save(embeddings_dict, open('embedding_dicts_fold_{}.pkl'.format(i), 'wb'))
+
         except KeyboardInterrupt:
             file_handler.myprint('Exiting from training early')
         t10 = time.time()
         file_handler.myprint('Total time for one fold:  %d (seconds)' % (t10 - t1))
-
+        sys.exit(0)
     avg_test_results = evaluator.compute_average_classification_results(kfold_test_results, list_metrics, **additional_data)
     file_handler.myprint("Average results from %s folds" % args.num_folds)
     avg_test_results_json = json.dumps(avg_test_results, sort_keys=True, indent=2)

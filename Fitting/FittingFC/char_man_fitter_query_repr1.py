@@ -12,7 +12,7 @@ from Fitting.FittingFC.multi_level_attention_composite_fitter import MultiLevelA
 from typing import List
 from sklearn.metrics import f1_score, precision_score, recall_score
 import sklearn
-
+from tqdm import tqdm
 
 class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
     """
@@ -363,6 +363,97 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
         if output_ranking: return results, list_error_analysis  # sorted(list_error_analysis, key=lambda x: x["qid"])
         return results
 
+    def get_embeddings(self, testRatings: interactions.ClassificationInteractions, K: int, output_ranking=False, **kargs):
+        """
+        Compute evaluation metrics. No swearing in code please!!!
+        Parameters
+        ----------
+        testRatings
+        K
+        output_ranking: whether we should output predictions
+        kargs
+
+        Returns
+        -------
+
+        """
+        embeddings = {}
+        for query, evidences_info in tqdm(testRatings.dict_claims_and_evidences_test.items(), desc="Get embeddings"):
+            evd_ids, labels, evd_contents, evd_lengths, evd_adj = evidences_info
+            assert len(set(labels)) == 1, "Must have only one label due to same claim"
+            all_labels.append(labels[0])
+            claim_content = testRatings.dict_claim_contents[query]
+            claim_source = np.array([testRatings.dict_claim_source[query]])  # (1, )
+            claim_char_src = np.array([testRatings.dict_char_left_src[query]])
+            evd_sources = np.array([testRatings.dict_evd_source[e] for e in evd_ids])  # (len(labels), 1)
+            evd_sources = self._pad_article_sources(evd_sources)  # (1, 30)
+            evd_char_src = np.array([testRatings.dict_char_right_src[e] for e in evd_ids])  # (len(labels), 1)
+            query_len = np.array([testRatings.dict_claim_lengths[query]])  # shape = (1, ) where B =1
+            # doc_lens = [testRatings.dict_doc_lengths[d] for d in docs]
+
+            claim_content = np.tile(claim_content, (1, 1))  # (1, L)
+            L = claim_content.shape[1]
+            evd_contents = np.array(evd_contents).reshape(1, len(labels), -1)  # shape = (1, n, R)
+            padded_evd_contents = self._pad_evidences(evd_contents)
+            # claim_content = my_utils.gpu(claim_content)
+            # evd_contents = my_utils.gpu(evd_contents)
+
+            claim_content = my_utils.gpu(my_utils.numpy2tensor(claim_content, dtype=torch.int), self._use_cuda)
+            evd_contents = my_utils.gpu(my_utils.numpy2tensor(evd_contents, dtype=torch.int),
+                                        self._use_cuda)  # (1, x, R)
+            padded_evd_contents = my_utils.gpu(my_utils.numpy2tensor(padded_evd_contents, dtype=torch.int),
+                                               self._use_cuda)  # (1, x, R)
+
+            # for evidences
+            evd_lengths = np.array(evd_lengths)
+            d_new_indices, d_old_indices = torch_utils.get_sorted_index_and_reverse_index(evd_lengths)
+            evd_lengths = my_utils.gpu(my_utils.numpy2tensor(evd_lengths, dtype=torch.int), self._use_cuda)
+            x = query_len  # np.repeat(query_len, len(labels))
+            q_new_indices, q_restoring_indices = torch_utils.get_sorted_index_and_reverse_index(x)
+            x = my_utils.gpu(my_utils.numpy2tensor(x, dtype=torch.int), self._use_cuda)
+
+            # for sources
+            claim_source = my_utils.gpu(my_utils.numpy2tensor(claim_source, dtype=torch.int), self._use_cuda)
+            evd_sources = my_utils.gpu(my_utils.numpy2tensor(evd_sources, dtype=torch.int), self._use_cuda)
+            claim_char_src = my_utils.gpu(my_utils.numpy2tensor(claim_char_src, dtype=torch.int), self._use_cuda)
+            evd_char_src = my_utils.gpu(my_utils.numpy2tensor(evd_char_src, dtype=torch.int), self._use_cuda)
+
+            # for query/evdience adj
+            query_adj = np.array([testRatings.dict_query_adj[query]])           # (1, L, L)
+            query_adj = my_utils.gpu(torch.from_numpy(query_adj), self._use_cuda)
+
+            # query_adj = my_utils.gpu(my_utils.numpy2tensor(query_adj, dtype=torch.int), self._use_cuda)
+
+            evd_adj = np.array([testRatings.dict_doc_adj[e] for e in evd_ids])               # (n, R, R)
+            evd_adj =  my_utils.gpu(torch.from_numpy(evd_adj), self._use_cuda)
+
+            # evd_adj =  my_utils.gpu(my_utils.numpy2tensor(evd_adj, dtype=torch.int), self._use_cuda)
+
+            additional_information = {
+                KeyWordSettings.Query_lens: x,
+                KeyWordSettings.QueryLensIndices: (q_new_indices, q_restoring_indices, x),
+                KeyWordSettings.Doc_lens: evd_lengths,
+                KeyWordSettings.DocLensIndices: (d_new_indices, d_old_indices, evd_lengths),
+                KeyWordSettings.QuerySources: claim_source,
+                KeyWordSettings.DocSources: evd_sources,  # (B = 1, n = 30)
+                KeyWordSettings.DocContentNoPaddingEvidence: evd_contents.view(1 * len(labels), -1),  # (B1, R)
+                KeyWordSettings.FIXED_NUM_EVIDENCES: self.fixed_num_evidences,
+                KeyWordSettings.EvidenceCountPerQuery: torch_utils.gpu(torch.from_numpy(np.array([len(labels)])),
+                                                                       self._use_cuda),
+                KeyWordSettings.QueryContentNoPaddingEvidence: claim_content.expand(len(labels), L),
+                KeyWordSettings.OutputRankingKey: output_ranking,
+                KeyWordSettings.FCClass.QueryCharSource: claim_char_src.long(),
+                KeyWordSettings.FCClass.DocCharSource: evd_char_src.long(),
+                KeyWordSettings.Query_Adj: query_adj,
+                KeyWordSettings.Evd_Docs_Adj: evd_adj
+            }
+
+            # padded_evd_contents = self._pad_evidences(evd_contents) # 1, 30, R
+            embedding = self._net.get_embeddings(claim_content, padded_evd_contents,
+                                      **additional_information)  # shape = (len(labels), )
+            embeddings[query] = embedding.squeeze()
+        return embeddings
+
     def _computing_metrics(self, true_labels: List[int], predicted_labels: List[float], predicted_probs: List[float]):
         """
         Computing classifiction metrics for 3 category classification
@@ -520,6 +611,30 @@ class CharManFitterQueryRepr1(MultiLevelAttentionCompositeFitter):
                                        f1_micro_val, valiation_time))
         return f1_macro_val
 
+    def get_all_embeddings(self, train_interactions: interactions.ClassificationInteractions,
+                        val_interactions: interactions.ClassificationInteractions,
+                        test_interactions: interactions.ClassificationInteractions):
+        mymodel = self._net
+        # print("Trained model: ", mymodel.out.weight)
+        mymodel.load_state_dict(torch.load(self.saved_model))
+        mymodel.train(False)
+        my_utils.gpu(mymodel, self._use_cuda)
+
+        embeddings_dict = {}
+
+        assert len(train_interactions.dict_claims_and_evidences_test) in KeyWordSettings.ClaimCountVal
+        train_embeddings_dict = self.get_embeddings(train_interactions, topN, output_ranking=True)
+        embeddings_dict.update(train_embeddings_dict)
+
+        assert len(val_interactions.dict_claims_and_evidences_test) in KeyWordSettings.ClaimCountVal
+        val_embeddings_dict = self.get_embeddings(val_interactions, topN, output_ranking=True)
+        embeddings_dict.update(val_embeddings_dict)
+
+        assert len(test_interactions.dict_claims_and_evidences_test) in KeyWordSettings.ClaimCountTest
+        test_embeddings_dict = self.get_embeddings(test_interactions, topN, output_ranking=True)
+        embeddings_dict.update(test_embeddings_dict)
+
+        return embeddings_dict
 
     def load_best_model(self, val_interactions: interactions.ClassificationInteractions,
                         test_interactions: interactions.ClassificationInteractions, topN: int = 10):
