@@ -24,13 +24,13 @@ import sys
 
 def fit_models(args):
     if not os.path.exists(args.log):
-        os.mkdir(args.log)
+        os.makedirs(args.log)
 
     curr_date = datetime.datetime.now().timestamp()  # seconds
     # folder to store all outputed files of a run
     secondary_log_folder = os.path.join(args.log, "log_results_%s" % (args.dataset))
     if not os.path.exists(secondary_log_folder):
-        os.mkdir(secondary_log_folder)
+        os.makedirs(secondary_log_folder)
     args.secondary_log_folder = secondary_log_folder
     # args.seed = random.randint(1, 150000)
     seed = args.seed
@@ -49,7 +49,7 @@ def fit_models(args):
     for i in range(args.num_folds):
         outfolder_per_fold = os.path.join(secondary_log_folder, "Fold_%s" % i)
         if not os.path.exists(outfolder_per_fold):
-            os.mkdir(outfolder_per_fold)
+            os.makedirs(outfolder_per_fold)
 
         logfolder_result_per_fold = os.path.join(outfolder_per_fold, "result_%s.txt" % int(seed))
         file_handler = FileHandlerFC()
